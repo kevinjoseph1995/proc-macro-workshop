@@ -1,8 +1,8 @@
-#[proc_macro_derive(Builder)]
+#[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
 
-    let _struct_data = match &ast.data {
+    let struct_data = match &ast.data {
         syn::Data::Struct(data_struct) => data_struct.clone(),
         syn::Data::Enum(_) => panic!("Cannot derive Builder from Enum type"),
         syn::Data::Union(_) => panic!("Cannot derive Builder from union type"),
@@ -10,7 +10,7 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let struct_name = ast.ident.clone();
     let builder_struct_ident = quote::format_ident!("{}Builder", struct_name.clone());
 
-    let is_optional_type_list: Vec<bool> = _struct_data
+    let is_optional_type_list: Vec<bool> = struct_data
         .fields
         .clone()
         .into_iter()
@@ -46,15 +46,16 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let builder_declaraions_token_stream = is_optional_type_list
         .clone()
         .into_iter()
-        .zip(_struct_data.fields.clone().into_iter())
+        .zip(struct_data.fields.clone().into_iter())
         .map(|(is_optional, field)| {
             let field_ident = field.ident.clone().unwrap();
-            let field_type;
-            if is_optional {
-                field_type = extract_inner_type_from_option(field.ty);
-            } else {
-                field_type = field.ty;
-            }
+            let field_type = {
+                if is_optional {
+                    extract_inner_type_from_option(field.ty)
+                } else {
+                    field.ty
+                }
+            };
             quote::quote! {
                 #field_ident : std::option::Option<#field_type>
             }
@@ -63,8 +64,9 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let builder_methods = is_optional_type_list
         .clone()
         .into_iter()
-        .zip(_struct_data.fields.clone().into_iter())
+        .zip(struct_data.fields.clone().into_iter())
         .map(|(is_optional, field)| {
+            println!("{:#?}", field);
             let field_iden = &field.ident;
             let field_type;
             if is_optional {
@@ -83,7 +85,7 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let field_idents = is_optional_type_list
         .clone()
         .into_iter()
-        .zip(_struct_data.fields.clone().into_iter())
+        .zip(struct_data.fields.clone().into_iter())
         .map(|(is_optional, field)| {
             let field_iden = field.clone().ident.unwrap();
             if is_optional {
@@ -97,7 +99,7 @@ pub fn derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
         });
 
-    let builder_field_initialized = _struct_data.fields.clone().into_iter().map(|field| {
+    let builder_field_initialized = struct_data.fields.clone().into_iter().map(|field| {
         let field_iden = &field.ident;
         quote::quote!(
             #field_iden : None
